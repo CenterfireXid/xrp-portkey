@@ -1,0 +1,54 @@
+# ── OS / Editor junk ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# ── Logs / runtime files ─────────────────────────────────────────
+logs/
+*.log
+*.pid
+*.pid.lock
+
+# ── Secrets & environment ───────────────────────────────────────
+*.env
+.env*
+*.secret
+*.key
+*.pem
+*.p12
+*.crt
+*.der
+*.kdbx
+# Tailscale identity/state (NEVER commit this)
+tailscaled.state
+tailscale-*.key
+
+# ── Project configs (track only .example templates) ─────────────
+# Keep your real configs private; commit the .example versions.
+config/wpa_supplicant-wlan0.conf
+config/dnsmasq.conf
+config/*.conf.local
+!config/*.example
+
+# ── Build artifacts (future web UI / tooling) ───────────────────
+node_modules/
+dist/
+build/
+.cache/
+coverage/
+*.tgz
+
+# ── Python (if you add small tools later) ───────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ── Shell checker / temp files ──────────────────────────────────
+*.bak
+*.tmp
+*.orig
