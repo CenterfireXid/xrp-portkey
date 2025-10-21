@@ -105,104 +105,33 @@ curl ifconfig.me
 
 ## Manual Setup (no installer)
 
-Below is a short version. For the complete walkthrough, see **[docs/manual-setup.md](docs/manual-setup.md)**.
-
-### 1) Base system
-```bash
-sudo apt update && sudo apt full-upgrade -y
-sudo apt install -y iptables-persistent dnsmasq dhcpcd5 curl
-```
-
-### 2) Headless Wi‑Fi (wlan0)
-```bash
-sudo systemctl stop NetworkManager 2>/dev/null || true
-sudo systemctl disable NetworkManager 2>/dev/null || true
-
-sudo tee /etc/wpa_supplicant/wpa_supplicant-wlan0.conf >/dev/null <<'EOF'
-ctrl_interface=DIR=/run/wpa_supplicant GROUP=netdev
-update_config=1
-country=US
-network={ ssid="PhoneHotspot" psk="hotspotpassword" priority=1 }
-network={ ssid="FriendsWiFi" psk="friendspassword" priority=2 }
-network={ ssid="HomeWiFi"    psk="homepassword"    priority=3 }
-EOF
-
-sudo chmod 600 /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
-sudo systemctl enable wpa_supplicant@wlan0 dhcpcd
-sudo systemctl start  wpa_supplicant@wlan0 dhcpcd
-```
-
-### 3) Tailscale + exit node
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo systemctl enable --now tailscaled
-sudo tailscale up  # authenticate via URL
-
-sudo tailscale up --exit-node=<EXIT_NODE_NAME> \
-  --accept-routes=true --exit-node-allow-lan-access=true --accept-dns=true
-```
-
-### 4) (Optional) Share tunnel over Ethernet
-```bash
-echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
-sudo ip addr add 192.168.88.1/24 dev eth0
-sudo ip link set eth0 up
-sudo iptables -t nat -A POSTROUTING -o tailscale0 -j MASQUERADE
-sudo iptables -A FORWARD -i eth0 -o tailscale0 -j ACCEPT
-sudo iptables -A FORWARD -i tailscale0 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
-sudo sh -c 'iptables-save > /etc/iptables/rules.v4'
-echo -e "interface=eth0\ndhcp-range=192.168.88.10,192.168.88.20,12h" | sudo tee /etc/dnsmasq.conf
-sudo systemctl enable dnsmasq && sudo systemctl restart dnsmasq
-```
-
-### 5) Boot persistence
-```bash
-sudo tee /usr/local/bin/portkey-boot.sh >/dev/null <<'EOS'
-#!/bin/bash
-set -e
-for i in {1..20}; do ip -4 addr show wlan0 | grep -q 'inet ' && break; sleep 2; done
-tailscale up --accept-routes=true --exit-node-allow-lan-access=true --accept-dns=true || true
-ip addr add 192.168.88.1/24 dev eth0 2>/dev/null || true
-ip link set eth0 up
-[ -f /etc/iptables/rules.v4 ] && iptables-restore < /etc/iptables/rules.v4
-systemctl restart dnsmasq || true
-EOS
-sudo chmod +x /usr/local/bin/portkey-boot.sh
-
-sudo tee /etc/systemd/system/portkey-boot.service >/dev/null <<'EOF'
-[Unit]
-Description=XRP-Portkey boot consolidation
-After=network-online.target tailscaled.service
-Wants=network-online.target
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/portkey-boot.sh
-RemainAfterExit=yes
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable portkey-boot.service tailscaled wpa_supplicant@wlan0 dhcpcd
-```
+For the complete walkthrough, see **[docs/manual-setup.md](docs/manual-setup.md)**.  
+And for a beginner friendly version with explanations for every command, see **[docs/manual-setup-beginner.md](docs/manual-setup-beginner.md)**.  
 
 ---
 
 ## Verification
 
-**On the Pi**
+Here are the key things to verify after install. For the complete verification, see **[docs/verification.md](docs/verification.md)**.
+
 ```bash
-tailscale status --self
-curl ifconfig.me
-sudo iptables -t nat -L POSTROUTING -v -n
+# 1) Wi-Fi up?
+iwgetid -r && ip -4 addr show wlan0 | grep inet
+
+# 2) Tailscale running + has 100.x IP?
+systemctl is-active tailscaled && tailscale ip -4
+
+# 3) Using your exit node?
+curl ifconfig.me    # should match exit node’s public IP
+
+# 4) (Optional) Ethernet client works?
+# On the Pi:
+iptables -t nat -S | grep MASQUERADE
+# On the wired device:
+curl ifconfig.me    # matches exit node’s IP
 ```
 
-**On the Ethernet client (if enabled)**
-```bash
-# should receive 192.168.88.10–20
-curl ifconfig.me   # should match the exit node’s WAN IP
-```
+If anything above fails (or you want the full checklist: DNS, NAT counters, reboot persistence, etc.), see **[docs/verification.md](docs/verification.md)**.
 
 ---
 
@@ -219,10 +148,8 @@ See **[docs/troubleshooting.md](docs/troubleshooting.md)** for deeper fixes. Hig
 
 ## Keep the Same Tailscale IP
 
-Back up and restore this file to preserve the same `100.x` after reinstall:
-```
-/var/lib/tailscale/tailscaled.state
-```
+Back up and restore this file to preserve the same `100.x` after reinstall: /var/lib/tailscale/tailscaled.state
+
 **Before wiping:**
 ```bash
 sudo systemctl stop tailscaled
